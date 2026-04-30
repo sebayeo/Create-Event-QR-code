@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="theme-color" content="#111827" />
+  <title>입장권 QR</title>
+  <!-- 가벼운 QR 라이브러리 (16KB) -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --accent: #2563eb;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(160deg, #0f172a 0%, #1e3a8a 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text);
+      padding: 24px;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 24px;
+      padding: 32px 28px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.5);
+      text-align: center;
+    }
+    .badge {
+      display: inline-block;
+      background: #eff6ff;
+      color: var(--accent);
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 24px;
+      font-weight: 700;
+    }
+    p.lead {
+      margin: 0 0 24px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .qr-frame {
+      background: #fff;
+      padding: 16px;
+      border-radius: 16px;
+      border: 1px solid #e2e8f0;
+      display: inline-block;
+      margin-bottom: 20px;
+    }
+    canvas#qr {
+      display: block;
+      width: 280px;
+      height: 280px;
+      image-rendering: pixelated;
+    }
+    .token {
+      font-family: 'SF Mono', 'Consolas', monospace;
+      font-size: 14px;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 8px;
+      word-break: break-all;
+    }
+    .footer {
+      margin-top: 16px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .error {
+      background: #fef2f2;
+      color: #b91c1c;
+      padding: 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    @media (max-width: 360px) {
+      canvas#qr { width: 240px; height: 240px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card" id="card">
+    <span class="badge">입장권</span>
+    <h1>QR을 행사장에서 보여주세요</h1>
+    <p class="lead">입장 시 1회만 사용 가능합니다.<br/>화면 밝기를 최대로 올려주세요.</p>
+    <div class="qr-frame"><canvas id="qr"></canvas></div>
+    <div class="token" id="tokenLabel"></div>
+    <div class="footer">스크린샷·캡처본은 사용할 수 없습니다.</div>
+  </div>
+
+  <script>
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const token = (params.get('token') || params.get('t') || '').trim();
+      const card = document.getElementById('card');
+      const canvas = document.getElementById('qr');
+      const tokenLabel = document.getElementById('tokenLabel');
+
+      if (!token) {
+        card.innerHTML = '<div class="error">유효하지 않은 링크입니다.<br/>카카오톡 메시지의 링크를 다시 확인해 주세요.</div>';
+        return;
+      }
+
+      // QR 페이로드는 토큰 그 자체. 스캐너가 토큰을 받아 서버로 전달.
+      // 짧은 페이로드 → QR 인식 거리/속도가 훨씬 좋아집니다.
+      QRCode.toCanvas(canvas, token, {
+        width: 280,
+        margin: 1,
+        errorCorrectionLevel: 'M',
+        color: { dark: '#0f172a', light: '#ffffff' }
+      }, function (err) {
+        if (err) {
+          card.innerHTML = '<div class="error">QR을 생성하지 못했습니다.<br/>새로고침 해주세요.</div>';
+          return;
+        }
+        tokenLabel.textContent = token;
+      });
+
+      // 화면 밝기 향상 - 가능한 경우 wake lock
+      if ('wakeLock' in navigator) {
+        navigator.wakeLock.request('screen').catch(() => {});
+      }
+    })();
+  </script>
+</body>
+</html>
