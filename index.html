@@ -2,8 +2,9 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#111827" />
+  <meta name="robots" content="noindex,nofollow" />
   <title>입장권 QR</title>
   <style>
     :root {
@@ -13,7 +14,7 @@
       --muted: #64748b;
       --accent: #2563eb;
     }
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body {
       margin: 0;
       padding: 0;
@@ -25,11 +26,14 @@
       justify-content: center;
       color: var(--text);
       padding: 24px;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
     }
     .card {
       background: var(--card);
       border-radius: 24px;
-      padding: 32px 28px;
+      padding: 28px 24px;
       width: 100%;
       max-width: 420px;
       box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.5);
@@ -43,15 +47,15 @@
       border-radius: 999px;
       font-size: 13px;
       font-weight: 600;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
     h1 {
       margin: 0 0 6px;
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 700;
     }
     p.lead {
-      margin: 0 0 24px;
+      margin: 0 0 20px;
       color: var(--muted);
       font-size: 14px;
       line-height: 1.5;
@@ -62,7 +66,7 @@
       border-radius: 16px;
       border: 1px solid #e2e8f0;
       display: inline-block;
-      margin-bottom: 20px;
+      margin-bottom: 18px;
       min-width: 296px;
       min-height: 296px;
     }
@@ -71,17 +75,26 @@
       width: 280px;
       height: 280px;
       image-rendering: pixelated;
+      pointer-events: none;
+      -webkit-user-drag: none;
     }
-    .token {
-      font-family: 'SF Mono', 'Consolas', monospace;
-      font-size: 14px;
-      letter-spacing: 0.1em;
+    .clock {
+      font-family: 'SF Mono', 'Consolas', 'Menlo', monospace;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text);
+      margin-bottom: 4px;
+      font-variant-numeric: tabular-nums;
+    }
+    .clock-label {
+      font-size: 11px;
       color: var(--muted);
-      margin-bottom: 8px;
-      word-break: break-all;
+      letter-spacing: 0.12em;
+      margin-bottom: 14px;
     }
     .footer {
-      margin-top: 16px;
+      margin-top: 14px;
       font-size: 12px;
       color: var(--muted);
       line-height: 1.6;
@@ -101,87 +114,102 @@
     }
   </style>
 </head>
-<body>
+<body oncontextmenu="return false" ondragstart="return false" onselectstart="return false">
   <div class="card" id="card">
     <span class="badge">입장권</span>
     <h1>QR을 행사장에서 보여주세요</h1>
     <p class="lead">입장 시 1회만 사용 가능합니다.<br/>화면 밝기를 최대로 올려주세요.</p>
+
     <div class="qr-frame"><canvas id="qr"></canvas></div>
-    <div class="token" id="tokenLabel"></div>
+
+    <div class="clock" id="clock">--:--:--</div>
+    <div class="clock-label">KST · 실시간</div>
+
     <div class="footer">스크린샷·캡처본은 사용할 수 없습니다.</div>
   </div>
 
   <script>
-    /**
-     * QR 라이브러리: qrious (canvas 기반, 약 14KB, 매우 안정적).
-     * 한 CDN이 막혀도 다른 CDN으로 자동 폴백.
-     */
-    (function () {
-      const SOURCES = [
-        'https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js',
-        'https://unpkg.com/qrious@4.0.2/dist/qrious.min.js',
-        'https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js'
-      ];
+    /* QR 라이브러리 (qrious) - CDN 3중 폴백 */
+    const SOURCES = [
+      'https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js',
+      'https://unpkg.com/qrious@4.0.2/dist/qrious.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js'
+    ];
 
-      function loadScript(idx) {
-        return new Promise(function (resolve, reject) {
-          if (idx >= SOURCES.length) { reject(new Error('all_cdn_failed')); return; }
-          const s = document.createElement('script');
-          s.src = SOURCES[idx];
-          s.async = true;
-          s.onload = function () { resolve(); };
-          s.onerror = function () { loadScript(idx + 1).then(resolve, reject); };
-          document.head.appendChild(s);
-        });
-      }
-
-      function showError(msg, detail) {
-        document.getElementById('card').innerHTML =
-          '<div class="error">' + msg +
-          (detail ? '<small>' + detail + '</small>' : '') + '</div>';
-      }
-
-      function generateQR() {
-        const params = new URLSearchParams(location.search);
-        const token = (params.get('token') || params.get('t') || '').trim();
-        if (!token) {
-          showError('유효하지 않은 링크입니다.<br/>카카오톡 메시지의 링크를 다시 확인해 주세요.');
-          return;
-        }
-        if (typeof QRious === 'undefined') {
-          showError('QR 라이브러리를 불러오지 못했습니다.<br/>네트워크 연결을 확인하고 새로고침 해주세요.');
-          return;
-        }
-        try {
-          const canvas = document.getElementById('qr');
-          new QRious({
-            element: canvas,
-            value: token,
-            size: 560,        // 내부 해상도(고해상도) → CSS로 280px 표시 = 더 선명
-            level: 'M',
-            background: '#ffffff',
-            foreground: '#0f172a',
-            padding: 8
-          });
-          document.getElementById('tokenLabel').textContent = token;
-          if ('wakeLock' in navigator) {
-            navigator.wakeLock.request('screen').catch(function () {});
-          }
-        } catch (e) {
-          showError('QR을 생성하지 못했습니다.<br/>새로고침 해주세요.', String(e && e.message || e));
-          if (window.console) console.error('[QR] generation failed:', e);
-        }
-      }
-
-      loadScript(0).then(generateQR, function (err) {
-        showError(
-          'QR 라이브러리를 불러오지 못했습니다.<br/>' +
-          '와이파이/모바일 데이터를 확인하고 새로고침 해주세요.',
-          String(err && err.message || err)
-        );
-        if (window.console) console.error('[QR] all CDNs failed', err);
+    function loadScript(idx) {
+      return new Promise(function (resolve, reject) {
+        if (idx >= SOURCES.length) { reject(new Error('all_cdn_failed')); return; }
+        const s = document.createElement('script');
+        s.src = SOURCES[idx];
+        s.async = true;
+        s.onload = resolve;
+        s.onerror = function () { loadScript(idx + 1).then(resolve, reject); };
+        document.head.appendChild(s);
       });
-    })();
+    }
+
+    function showError(msg, detail) {
+      document.getElementById('card').innerHTML =
+        '<div class="error">' + msg +
+        (detail ? '<small>' + detail + '</small>' : '') + '</div>';
+    }
+
+    /* 한국 표준시 실시간 시계 */
+    function startClock() {
+      const el = document.getElementById('clock');
+      const fmt = new Intl.DateTimeFormat('ko-KR', {
+        timeZone: 'Asia/Seoul',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+      });
+      function tick() {
+        const parts = fmt.formatToParts(new Date());
+        const get = (t) => (parts.find(p => p.type === t) || {}).value || '';
+        let hh = get('hour'); if (hh === '24') hh = '00';
+        el.textContent =
+          get('year') + '-' + get('month') + '-' + get('day') + '  ' +
+          hh + ':' + get('minute') + ':' + get('second');
+      }
+      tick();
+      setInterval(tick, 1000);
+    }
+
+    function start() {
+      const params = new URLSearchParams(location.search);
+      const token = (params.get('token') || params.get('t') || '').trim();
+      if (!token) {
+        showError('유효하지 않은 링크입니다.<br/>카카오톡 메시지의 링크를 다시 확인해 주세요.');
+        return;
+      }
+      if (typeof QRious === 'undefined') {
+        showError('QR 라이브러리를 불러오지 못했습니다.<br/>네트워크 연결을 확인하고 새로고침 해주세요.');
+        return;
+      }
+      try {
+        new QRious({
+          element: document.getElementById('qr'),
+          value: token,
+          size: 560,
+          level: 'M',
+          background: '#ffffff',
+          foreground: '#0f172a',
+          padding: 8
+        });
+      } catch (e) {
+        showError('QR을 생성하지 못했습니다.<br/>새로고침 해주세요.', String(e && e.message || e));
+        return;
+      }
+      startClock();
+      if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(function () {});
+    }
+
+    loadScript(0).then(start, function (err) {
+      showError(
+        'QR 라이브러리를 불러오지 못했습니다.<br/>와이파이/모바일 데이터를 확인하고 새로고침 해주세요.',
+        String(err && err.message || err)
+      );
+    });
   </script>
 </body>
 </html>
